@@ -1110,7 +1110,7 @@ def get_jwt_token(config):
     jwt_token = jwt.encode(payload, private_key, algorithm="RS256")
 
     # Get client token
-    inst_id = config["instalation_id"]
+    inst_id = config["installation_id"]
     url = f"https://api.github.com/app/installations/{inst_id}/access_tokens"
 
     header = {
