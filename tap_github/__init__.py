@@ -468,7 +468,7 @@ def get_all_organization_members(org, schemas, repo_path, state, mdata):
             organization_members = response.json()
             for r in organization_members:
                 r["org_id"] = org["id"]
-                r["org_name"] = org["login"]
+                r["org_name"] = org.get("login", "")
                 # transform and write release record
                 with singer.Transformer() as transformer:
                     rec = transformer.transform(r, schemas, metadata=metadata.to_map(mdata))
