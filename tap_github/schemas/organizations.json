@@ -1,0 +1,74 @@
+{
+  "type": [
+    "null",
+    "object"
+  ],
+  "properties": {
+    "login": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "id": {
+      "type": [
+        "null",
+        "integer"
+      ]
+    },
+    "node_id": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "url": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "repos_url": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "events_url": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "hooks_url": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "issues_url": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "members_url": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "avatar_url": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "description": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  }
+}
