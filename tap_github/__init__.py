@@ -37,6 +37,8 @@ KEY_PROPERTIES = {
     'issue_labels': ['id'],
     'issue_milestones': ['id'],
     'commit_comments': ['id'],
+    'organizations': ['id'],
+    'organization_members': ['id'],
     'projects': ['id'],
     'project_columns': ['id'],
     'project_cards': ['id'],
@@ -434,6 +436,46 @@ def get_all_teams(schemas, repo_path, state, mdata, _start_date):
                         singer.write_record('team_memberships', team_memberships_rec, time_extracted=extraction_time)
 
     return state
+
+def get_all_organizations(schemas, repo_path, state, mdata, _start_date):
+    with metrics.record_counter('organizations') as counter:
+        for response in authed_get_all_pages(
+                'organizations',
+                'https://api.github.com/user/orgs?sort=created_at&direction=desc'
+        ):
+            organizations = response.json()
+            extraction_time = singer.utils.now()
+
+            for r in organizations:
+
+                # transform and write release record
+                with singer.Transformer() as transformer:
+                    rec = transformer.transform(r, schemas['organizations'], metadata=metadata.to_map(mdata['organizations']))
+                singer.write_record('organizations', rec, time_extracted=extraction_time)
+                counter.increment()
+
+                if schemas.get('organization_members'):
+                    for team_members_rec in get_all_organization_members(rec, schemas['organization_members'], repo_path, state, mdata['organization_members']):
+                        singer.write_record('organization_members', team_members_rec, time_extracted=extraction_time)
+    return state
+
+def get_all_organization_members(org, schemas, repo_path, state, mdata):
+    with metrics.record_counter('organization_members') as counter:
+        for response in authed_get_all_pages(
+                'organization_members',
+                'https://api.github.com/orgs/{}/members?sort=created_at&direction=desc'.format(org["id"])
+        ):
+            organization_members = response.json()
+            for r in organization_members:
+                r["org_id"] = org["id"]
+                r["org_name"] = org["login"]
+                # transform and write release record
+                with singer.Transformer() as transformer:
+                    rec = transformer.transform(r, schemas, metadata=metadata.to_map(mdata))
+                counter.increment()
+                yield rec
+    return state
+
 
 def get_all_team_members(team_slug, schemas, repo_path, state, mdata):
     org = repo_path.split('/')[0]
@@ -1138,13 +1180,15 @@ SYNC_FUNCTIONS = {
     'issue_labels': get_all_issue_labels,
     'projects': get_all_projects,
     'commit_comments': get_all_commit_comments,
-    'teams': get_all_teams
+    'teams': get_all_teams,
+    'organizations': get_all_organizations
 }
 
 SUB_STREAMS = {
     'pull_requests': ['reviews', 'review_comments', 'pr_commits'],
     'projects': ['project_cards', 'project_columns'],
-    'teams': ['team_members', 'team_memberships']
+    'teams': ['team_members', 'team_memberships'],
+    'organizations': ['organization_members']
 }
 
 def do_sync(config, state, catalog):
