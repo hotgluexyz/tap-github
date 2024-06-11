@@ -389,7 +389,10 @@ def verify_repo_access(url_for_repo, repo):
 def verify_access_for_repo(config):
 
     access_token = config['access_token']
-    session.headers.update({'authorization': 'token ' + access_token, 'per_page': '1', 'page': '1'})
+    if config["is_jwt_token"]:
+        session.headers.update({'authorization': 'token ' + access_token, 'per_page': '1', 'page': '1'})
+    else:
+        session.headers.update({'Authorization': 'Bearer ' + access_token, 'per_page': '1', 'page': '1'})
 
     repositories = extract_repos_from_config(config)
 
@@ -1193,7 +1196,10 @@ SUB_STREAMS = {
 
 def do_sync(config, state, catalog):
     access_token = config['access_token']
-    session.headers.update({'authorization': 'token ' + access_token})
+    if config["is_jwt_token"]:
+        session.headers.update({'authorization': 'token ' + access_token})
+    else:
+        session.headers.update({'Authorization': 'Bearer ' + access_token})
 
     start_date = config['start_date'] if 'start_date' in config else None
     # get selected streams, make sure stream dependencies are met
@@ -1259,8 +1265,10 @@ def main():
     global MAX_SLEEP_SECONDS #pylint: disable=global-statement
     MAX_SLEEP_SECONDS = config_max_sleep if config_max_sleep else DEFAULT_SLEEP_SECONDS
 
+    args.config["is_jwt_token"] = False
     if not "access_token" in args.config:
         args.config["access_token"] = get_jwt_token(args.config)
+        args.config["is_jwt_token"] = True
 
     if args.discover:
         do_discover(args.config)
