@@ -45,7 +45,8 @@ KEY_PROPERTIES = {
     'repos': ['id'],
     'teams': ['id'],
     'team_members': ['id', 'team_slug'],
-    'team_memberships': ['url']
+    'team_memberships': ['url'],
+    'deployments': ['id'],
 }
 
 DEFAULT_SLEEP_SECONDS = 600
@@ -1100,6 +1101,29 @@ def get_all_stargazers(schema, repo_path, state, mdata, _start_date):
 
     return state
 
+def get_all_deployments(schema, repo_path, state, mdata, _start_date):
+    '''
+    https://docs.github.com/en/rest/deployments/deployments?apiVersion=2022-11-28#list-deployments
+    '''
+
+    deployments_headers = {'Accept': 'application/vnd.github.v3.star+json'}
+
+    with metrics.record_counter('deployments') as counter:
+        for response in authed_get_all_pages(
+                'deployments',
+                'https://api.github.com/repos/{}/deployments'.format(repo_path), deployments_headers
+        ):
+            deployments = response.json()
+            extraction_time = singer.utils.now()
+            for deployment in deployments:
+                deployment['_sdc_repository'] = repo_path
+                with singer.Transformer() as transformer:
+                    rec = transformer.transform(deployment, schema, metadata=metadata.to_map(mdata))
+                singer.write_record('deployments', rec, time_extracted=extraction_time)
+                counter.increment()
+
+    return state
+
 def get_selected_streams(catalog):
     '''
     Gets selected streams.  Checks schema's 'selected'
@@ -1184,7 +1208,8 @@ SYNC_FUNCTIONS = {
     'projects': get_all_projects,
     'commit_comments': get_all_commit_comments,
     'teams': get_all_teams,
-    'organizations': get_all_organizations
+    'organizations': get_all_organizations,
+    'deployments': get_all_deployments,
 }
 
 SUB_STREAMS = {
