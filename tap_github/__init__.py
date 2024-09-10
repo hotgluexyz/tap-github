@@ -49,9 +49,6 @@ KEY_PROPERTIES = {
     'deployments': ['id'],
 }
 
-DEFAULT_SLEEP_SECONDS = 600
-MAX_SLEEP_SECONDS = DEFAULT_SLEEP_SECONDS
-
 class GithubException(Exception):
     pass
 
@@ -80,9 +77,6 @@ class MovedPermanentlyError(GithubException):
     pass
 
 class ConflictError(GithubException):
-    pass
-
-class RateLimitExceeded(GithubException):
     pass
 
 ERROR_CODE_EXCEPTION_MAPPING = {
@@ -202,13 +196,10 @@ def calculate_seconds(epoch):
     return int(round((epoch - current), 0))
 
 def rate_throttling(response):
-    if int(response.headers['X-RateLimit-Remaining']) == 0:
-        seconds_to_sleep = calculate_seconds(int(response.headers['X-RateLimit-Reset']))
-
-        if seconds_to_sleep > MAX_SLEEP_SECONDS:
-            message = "API rate limit exceeded, please try after {} seconds.".format(seconds_to_sleep)
-            raise RateLimitExceeded(message) from None
-
+    remaining = int(response.headers['X-RateLimit-Remaining'])
+    reset_time = int(response.headers['X-RateLimit-Reset'])
+    if remaining == 0:
+        seconds_to_sleep = calculate_seconds(reset_time)
         logger.info("API rate limit exceeded. Tap will retry the data collection after %s seconds.", seconds_to_sleep)
         time.sleep(seconds_to_sleep)
 
@@ -1282,13 +1273,6 @@ def do_sync(config, state, catalog):
 @singer.utils.handle_top_exception(logger)
 def main():
     args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS)
-
-    # get optional config key `max_sleep_seconds`
-    config_max_sleep = args.config.get('max_sleep_seconds')
-
-    # set global `MAX_SLEEP_SECONDS` for rate_throttling function or use default
-    global MAX_SLEEP_SECONDS #pylint: disable=global-statement
-    MAX_SLEEP_SECONDS = config_max_sleep if config_max_sleep else DEFAULT_SLEEP_SECONDS
 
     args.config["is_jwt_token"] = False
     if not "access_token" in args.config:

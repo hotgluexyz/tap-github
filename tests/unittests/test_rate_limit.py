@@ -25,20 +25,6 @@ class TestRateLimit(unittest.TestCase):
         self.assertTrue(mocked_sleep.called)
 
 
-    def test_rate_limit_exception(self, mocked_sleep):
-
-        mocked_sleep.side_effect = None
-
-        resp = api_call()
-        resp.headers["X-RateLimit-Reset"] = int(round(time.time(), 0)) + 601
-        resp.headers["X-RateLimit-Remaining"] = 0
-
-        try:
-            tap_github.rate_throttling(resp)
-        except tap_github.RateLimitExceeded as e:
-            self.assertEqual(str(e), "API rate limit exceeded, please try after 601 seconds.")
-
-
     def test_rate_limit_not_exceeded(self, mocked_sleep):
 
         mocked_sleep.side_effect = None
