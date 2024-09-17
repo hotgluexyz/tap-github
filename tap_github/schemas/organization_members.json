@@ -4,6 +4,12 @@
     "object"
   ],
   "properties": {
+    "name": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
     "login": {
       "type": [
         "null",
