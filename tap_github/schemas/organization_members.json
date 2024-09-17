@@ -4,12 +4,6 @@
     "object"
   ],
   "properties": {
-    "name": {
-      "type": [
-        "null",
-        "string"
-      ]
-    },
     "login": {
       "type": [
         "null",
@@ -26,6 +20,12 @@
       "type": [
         "null",
         "number"
+      ]
+    },
+    "name": {
+      "type": [
+        "null",
+        "string"
       ]
     },
     "node_id": {

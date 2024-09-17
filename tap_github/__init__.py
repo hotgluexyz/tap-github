@@ -464,6 +464,10 @@ def get_all_organization_members(org, schemas, repo_path, state, mdata):
             for r in organization_members:
                 r["org_id"] = org["id"]
                 r["org_name"] = org.get("login", "")
+                user_rec = authed_get('organization_members_users', r["url"])
+                user_json = user_rec.json()
+                r["name"] = user_json.get("name")
+                r["email"] = user_json.get("email")
                 # transform and write release record
                 with singer.Transformer() as transformer:
                     rec = transformer.transform(r, schemas, metadata=metadata.to_map(mdata))
