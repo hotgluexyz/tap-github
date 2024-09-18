@@ -49,6 +49,9 @@ KEY_PROPERTIES = {
     'deployments': ['id'],
 }
 
+VISITED_ORGS_IDS = set()
+
+
 class GithubException(Exception):
     pass
 
@@ -442,6 +445,12 @@ def get_all_organizations(schemas, repo_path, state, mdata, _start_date):
             extraction_time = singer.utils.now()
 
             for r in organizations:
+
+                if r["id"] in VISITED_ORGS_IDS:
+                    continue
+                else:
+                    VISITED_ORGS_IDS.add(r["id"])
+                    
 
                 # transform and write release record
                 with singer.Transformer() as transformer:
