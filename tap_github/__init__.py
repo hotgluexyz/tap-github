@@ -200,9 +200,15 @@ def calculate_seconds(epoch):
     current = time.time()
     return math.ceil(epoch - current)
 
+def get_reset_time(response, message = "Reset time will be reached in {} seconds."):
+    reset_time = int(response.headers['X-RateLimit-Reset'])
+    seconds_to_sleep = calculate_seconds(reset_time)
+    logger.info(message.format(seconds_to_sleep))
+    return reset_time
+
 def rate_throttling(response):
     remaining = int(response.headers['X-RateLimit-Remaining'])
-    reset_time = int(response.headers['X-RateLimit-Reset'])
+    reset_time = get_reset_time(response)
     if remaining == 0:
         seconds_to_sleep = calculate_seconds(reset_time)
         logger.info("API rate limit exceeded. Tap will retry the data collection after %s seconds.", seconds_to_sleep)
@@ -217,6 +223,7 @@ def authed_get(source, url, headers={}):
         session.headers.update(headers)
         resp = session.request(method='get', url=url, timeout=get_request_timeout())
         if resp.status_code != 200:
+            _ = get_reset_time(resp, message=f"[Request Status {resp.status_code}] Reset time was going to be reached in" + " {} seconds.")
             raise_for_error(resp, source)
         timer.tags[metrics.Tag.http_status_code] = resp.status_code
         rate_throttling(resp)
