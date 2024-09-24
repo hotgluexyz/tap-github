@@ -27,6 +27,7 @@ KEY_PROPERTIES = {
     'assignees': ['id'],
     'collaborators': ['id'],
     'pull_requests':['id'],
+    'pull_request_details':['id'],
     'stargazers': ['user_id'],
     'releases': ['id'],
     'reviews': ['id'],
@@ -845,7 +846,7 @@ def get_all_pull_requests(schemas, repo_path, state, mdata, start_date):
     else:
         bookmark_time = 0
 
-    with metrics.record_counter('pull_requests') as counter:
+    with metrics.record_counter('pull_requests') as counter, metrics.record_counter('pull_request_details') as details_counter:
         with metrics.record_counter('reviews') as reviews_counter:
             for response in authed_get_all_pages(
                     'pull_requests',
@@ -854,7 +855,6 @@ def get_all_pull_requests(schemas, repo_path, state, mdata, start_date):
                 pull_requests = response.json()
                 extraction_time = singer.utils.now()
                 for pr in pull_requests:
-
 
                     # skip records that haven't been updated since the last run
                     # the GitHub API doesn't currently allow a ?since param for pulls
@@ -900,7 +900,24 @@ def get_all_pull_requests(schemas, repo_path, state, mdata, start_date):
                             singer.write_record('pr_commits', pr_commit, time_extracted=extraction_time)
                             singer.write_bookmark(state, repo_path, 'pr_commits', {'since': singer.utils.strftime(extraction_time)})
 
+                    if schemas.get('pull_request_details'):
+                        pull_request_detail = get_pull_request_details(rec, schemas['pull_request_details'], repo_path, state, mdata['pull_request_details'])
+                        if pull_request_detail:
+                            singer.write_record('pull_request_details', pull_request_detail, time_extracted=extraction_time)
+                            singer.write_bookmark(state, repo_path, 'pull_request_details', {'since': singer.utils.strftime(extraction_time)})
+                            details_counter.increment()
+                        else:
+                            logger.warning(f"Pull request details not found or failed to process for record: {rec['id']}")
+
     return state
+
+def get_pull_request_details(pull_request, schemas, repo_path, state, mdata):
+    pr_response = authed_get("pull_request_details", pull_request["url"])
+    pr = pr_response.json()
+    # transform and write release record
+    with singer.Transformer() as transformer:
+        rec = transformer.transform(pr, schemas, metadata=metadata.to_map(mdata))
+    return rec
 
 def get_reviews_for_pr(pr_number, schema, repo_path, state, mdata):
     for response in authed_get_all_pages(
@@ -1217,7 +1234,7 @@ SYNC_FUNCTIONS = {
 }
 
 SUB_STREAMS = {
-    'pull_requests': ['reviews', 'review_comments', 'pr_commits'],
+    'pull_requests': ['reviews', 'review_comments', 'pr_commits', 'pull_request_details'],
     'projects': ['project_cards', 'project_columns'],
     'teams': ['team_members', 'team_memberships'],
     'organizations': ['organization_members']
