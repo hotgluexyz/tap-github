@@ -6,6 +6,7 @@ import requests
 import backoff
 import singer
 import jwt
+import math
 
 from datetime import datetime
 
@@ -197,7 +198,7 @@ def raise_for_error(resp, source):
 
 def calculate_seconds(epoch):
     current = time.time()
-    return int(round((epoch - current), 0))
+    return math.ceil(epoch - current)
 
 def rate_throttling(response):
     remaining = int(response.headers['X-RateLimit-Remaining'])
