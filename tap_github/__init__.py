@@ -84,6 +84,9 @@ class MovedPermanentlyError(GithubException):
 class ConflictError(GithubException):
     pass
 
+class APIRateLimitExceededError(GithubException):
+    pass
+
 ERROR_CODE_EXCEPTION_MAPPING = {
     301: {
         "raise_exception": MovedPermanentlyError,
@@ -190,6 +193,9 @@ def raise_for_error(resp, source):
         # don't raise a NotFoundException
         return None
 
+    if error_code == 403 and response_json and "message" in response_json and "API rate limit exceeded" in response_json["message"]:
+        raise APIRateLimitExceededError(f"[Error Code] {error_code}: {response_json}")
+
     message = "HTTP-error-code: {}, Error: {}".format(
         error_code, ERROR_CODE_EXCEPTION_MAPPING.get(error_code, {}).get("message", "Unknown Error") if response_json == {} else response_json)
 
@@ -200,30 +206,30 @@ def calculate_seconds(epoch):
     current = time.time()
     return math.ceil(epoch - current)
 
-def get_reset_time(response, message = "Reset time will be reached in {} seconds."):
+def get_reset_time_and_remaining_calls(response, message = "Reset time will be reached in {} seconds. Remaining {} calls"):
     reset_time = int(response.headers['X-RateLimit-Reset'])
+    remaining = int(response.headers['X-RateLimit-Remaining'])
     seconds_to_sleep = calculate_seconds(reset_time)
-    logger.info(message.format(seconds_to_sleep))
-    return reset_time
+    logger.info(message.format(seconds_to_sleep,remaining))
+    return reset_time, remaining
 
 def rate_throttling(response):
-    remaining = int(response.headers['X-RateLimit-Remaining'])
-    reset_time = get_reset_time(response)
+    reset_time, remaining = get_reset_time_and_remaining_calls(response)
     if remaining == 0:
         seconds_to_sleep = calculate_seconds(reset_time)
-        logger.info("API rate limit exceeded. Tap will retry the data collection after %s seconds.", seconds_to_sleep)
+        logger.info("API rate limit was consumed. Tap will retry the data collection after %s seconds.", seconds_to_sleep)
         time.sleep(seconds_to_sleep)
 
 # pylint: disable=dangerous-default-value
 # during 'Timeout' error there is also possibility of 'ConnectionError',
 # hence added backoff for 'ConnectionError' too.
-@backoff.on_exception(backoff.expo, (requests.Timeout, requests.ConnectionError), max_tries=5, factor=2)
+@backoff.on_exception(backoff.expo, (requests.Timeout, requests.ConnectionError, APIRateLimitExceededError), max_tries=5, factor=2)
 def authed_get(source, url, headers={}):
     with metrics.http_request_timer(source) as timer:
         session.headers.update(headers)
         resp = session.request(method='get', url=url, timeout=get_request_timeout())
         if resp.status_code != 200:
-            _ = get_reset_time(resp, message=f"[Request Status {resp.status_code}] Reset time was going to be reached in" + " {} seconds.")
+            _ = get_reset_time_and_remaining_calls(resp, message=f"[Request Status {resp.status_code}] Reset time was going to be reached in" + " {} seconds.  Remaining {} calls")
             raise_for_error(resp, source)
         timer.tags[metrics.Tag.http_status_code] = resp.status_code
         rate_throttling(resp)
