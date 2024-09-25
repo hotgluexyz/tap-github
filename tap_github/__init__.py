@@ -928,6 +928,7 @@ def get_all_pull_requests(schemas, repo_path, state, mdata, start_date):
 def get_pull_request_details(pull_request, schemas, repo_path, state, mdata):
     pr_response = authed_get("pull_request_details", pull_request["url"])
     pr = pr_response.json()
+    pr['_sdc_repository'] = repo_path
     # transform and write release record
     with singer.Transformer() as transformer:
         rec = transformer.transform(pr, schemas, metadata=metadata.to_map(mdata))
