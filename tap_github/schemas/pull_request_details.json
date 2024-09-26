@@ -2481,6 +2481,24 @@
           "null"
         ]
       },
+      "comments": {
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "review_comments": {
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "commits": {
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
       "maintainer_can_modify": {
         "type": [
           "boolean",
