@@ -207,10 +207,14 @@ def calculate_seconds(epoch):
     return math.ceil(epoch - current)
 
 def get_reset_time_and_remaining_calls(response, message = "Reset time will be reached in {} seconds. Remaining {} calls"):
-    reset_time = int(response.headers['X-RateLimit-Reset'])
-    remaining = int(response.headers['X-RateLimit-Remaining'])
-    seconds_to_sleep = calculate_seconds(reset_time)
-    logger.info(message.format(seconds_to_sleep,remaining))
+    try:
+        reset_time = int(response.headers['X-RateLimit-Reset'])
+        remaining = int(response.headers['X-RateLimit-Remaining'])
+        seconds_to_sleep = calculate_seconds(reset_time)
+        logger.info(message.format(seconds_to_sleep,remaining))
+    except:
+        logger.exception(response.headers)
+        return None, None
     return reset_time, remaining
 
 def rate_throttling(response):
