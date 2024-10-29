@@ -1,33 +1,59 @@
 {
-  "type": ["null", "object"],
+  "type": [
+    "null",
+    "object"
+  ],
   "additionalProperties": false,
   "properties": {
     "_sdc_repository": {
-      "type": ["string"]
+      "type": [
+        "string"
+      ]
     },
     "sha": {
-      "type": ["null", "string"],
+      "type": [
+        "null",
+        "string"
+      ],
       "description": "The git commit hash"
     },
     "url": {
-      "type": ["null", "string"]
+      "type": [
+        "null",
+        "string"
+      ]
     },
     "parents": {
-      "type": ["null", "array"],
+      "type": [
+        "null",
+        "array"
+      ],
       "items": {
-        "type": ["null", "object"],
+        "type": [
+          "null",
+          "object"
+        ],
         "additionalProperties": false,
         "properties": {
           "sha": {
-            "type": ["null", "string"],
+            "type": [
+              "null",
+              "string"
+            ],
             "description": "The git hash of the parent commit"
           },
           "url": {
-            "type": ["null", "string"],
+            "type": [
+              "null",
+              "string"
+            ],
             "description": "The URL to the parent commit"
           },
           "html_url": {
-            "type": ["null", "string"],
+            "type": [
+              "null",
+              "string"
+            ],
             "description": "The HTML URL to the parent commit"
           }
         }
@@ -96,86 +122,189 @@
       }
     },
     "html_url": {
-      "type": ["null", "string"],
+      "type": [
+        "null",
+        "string"
+      ],
       "description": "The HTML URL to the commit"
     },
     "comments_url": {
-      "type": ["null", "string"],
+      "type": [
+        "null",
+        "string"
+      ],
       "description": "The URL to the commit's comments page"
     },
     "commit": {
-      "type": ["null", "object"],
+      "type": [
+        "null",
+        "object"
+      ],
       "additionalProperties": false,
       "properties": {
         "url": {
-          "type": ["null", "string"],
+          "type": [
+            "null",
+            "string"
+          ],
           "description": "The URL to the commit"
         },
         "tree": {
-          "type": ["null", "object"],
+          "type": [
+            "null",
+            "object"
+          ],
           "additionalProperties": false,
           "properties": {
             "sha": {
-              "type": ["null", "string"]
+              "type": [
+                "null",
+                "string"
+              ]
             },
             "url": {
-              "type": ["null", "string"]
+              "type": [
+                "null",
+                "string"
+              ]
             }
           }
         },
         "author": {
-          "type": ["null", "object"],
+          "type": [
+            "null",
+            "object"
+          ],
           "additionalProperties": false,
           "properties": {
             "date": {
-              "type": ["null", "string"],
+              "type": [
+                "null",
+                "string"
+              ],
               "format": "date-time",
               "description": "The date the author committed the change"
             },
             "name": {
-              "type": ["null", "string"],
+              "type": [
+                "null",
+                "string"
+              ],
               "description": "The author's name"
             },
             "email": {
-              "type": ["null", "string"],
+              "type": [
+                "null",
+                "string"
+              ],
               "description": "The author's email"
             },
             "login": {
-              "type": ["null", "string"],
+              "type": [
+                "null",
+                "string"
+              ],
               "description": "The author's login"
             }
           }
         },
         "message": {
-          "type": ["null", "string"],
+          "type": [
+            "null",
+            "string"
+          ],
           "description": "The commit message"
         },
         "committer": {
-          "type": ["null", "object"],
+          "type": [
+            "null",
+            "object"
+          ],
           "additionalProperties": false,
           "properties": {
             "date": {
-              "type": ["null", "string"],
+              "type": [
+                "null",
+                "string"
+              ],
               "format": "date-time",
               "description": "The date the committer committed the change"
             },
             "name": {
-              "type": ["null", "string"],
+              "type": [
+                "null",
+                "string"
+              ],
               "description": "The committer's name"
             },
             "email": {
-              "type": ["null", "string"],
+              "type": [
+                "null",
+                "string"
+              ],
               "description": "The committer's email"
             },
             "login": {
-              "type": ["null", "string"],
+              "type": [
+                "null",
+                "string"
+              ],
               "description": "The committer's login"
             }
           }
         },
         "comment_count": {
-          "type": ["null", "integer"],
+          "type": [
+            "null",
+            "integer"
+          ],
           "description": "The number of comments on the commit"
+        }
+      }
+    },
+    "committer": {
+      "type": [
+        "null",
+        "object"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "login": {
+          "type": [
+            "null",
+            "string"
+          ],
+          "description": "The committer's login"
+        },
+        "id": {
+          "type": [
+            "null",
+            "integer"
+          ],
+          "description": "The committer's id"
+        }
+      }
+    },
+    "author": {
+      "type": [
+        "null",
+        "object"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "login": {
+          "type": [
+            "null",
+            "string"
+          ],
+          "description": "The committer's login"
+        },
+        "id": {
+          "type": [
+            "null",
+            "integer"
+          ],
+          "description": "The committer's id"
         }
       }
     }
