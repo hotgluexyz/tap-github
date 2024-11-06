@@ -87,6 +87,9 @@ class ConflictError(GithubException):
 class APIRateLimitExceededError(GithubException):
     pass
 
+class RetriableServerError(GithubException):
+    pass
+
 ERROR_CODE_EXCEPTION_MAPPING = {
     301: {
         "raise_exception": MovedPermanentlyError,
@@ -123,6 +126,10 @@ ERROR_CODE_EXCEPTION_MAPPING = {
     500: {
         "raise_exception": InternalServerError,
         "message": "An error has occurred at Github's end."
+    },
+    502: {
+        "raise_exception": RetriableServerError,
+        "message": 'Server Error'
     }
 }
 
@@ -227,7 +234,7 @@ def rate_throttling(response):
 # pylint: disable=dangerous-default-value
 # during 'Timeout' error there is also possibility of 'ConnectionError',
 # hence added backoff for 'ConnectionError' too.
-@backoff.on_exception(backoff.expo, (requests.Timeout, requests.ConnectionError, APIRateLimitExceededError), max_tries=5, factor=2)
+@backoff.on_exception(backoff.expo, (requests.Timeout, requests.ConnectionError, APIRateLimitExceededError, RetriableServerError), max_tries=5, factor=2)
 def authed_get(source, url, headers={}):
     with metrics.http_request_timer(source) as timer:
         session.headers.update(headers)
