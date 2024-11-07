@@ -241,9 +241,12 @@ def authed_get(source, url, headers={}):
         resp = session.request(method='get', url=url, timeout=get_request_timeout())
         if resp.status_code != 200:
             _ = get_reset_time_and_remaining_calls(resp, message=f"[Request Status {resp.status_code}] Reset time was going to be reached in" + " {} seconds.  Remaining {} calls")
+            # wait for limit to reset
+            if resp.status_code == 403:
+                rate_throttling(resp)
+            # retry
             raise_for_error(resp, source)
         timer.tags[metrics.Tag.http_status_code] = resp.status_code
-        rate_throttling(resp)
         if resp.status_code == 404:
             # return an empty response body since we're not raising a NotFoundException
             resp._content = b'{}' # pylint: disable=protected-access
