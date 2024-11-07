@@ -893,8 +893,13 @@ def get_all_pull_requests(schemas, repo_path, state, mdata, start_date):
                     pr['_sdc_repository'] = repo_path
 
                     # transform and write pull_request record
-                    with singer.Transformer() as transformer:
-                        rec = transformer.transform(pr, schemas['pull_requests'], metadata=metadata.to_map(mdata['pull_requests']))
+                    try:
+                        with singer.Transformer() as transformer:
+                            rec = transformer.transform(pr, schemas['pull_requests'], metadata=metadata.to_map(mdata['pull_requests']))
+                    except:
+                        logger.exception(f"Failed to transform record [{pr}]")
+                        raise
+
                     singer.write_record('pull_requests', rec, time_extracted=extraction_time)
                     singer.write_bookmark(state, repo_path, 'pull_requests', {'since': singer.utils.strftime(extraction_time)})
                     counter.increment()
