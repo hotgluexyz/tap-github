@@ -708,7 +708,7 @@
           ]
         },
         "user": {
-          "type": "object",
+          "type": ["null", "object"],
           "properties": {
             "login": {
               "type": [
@@ -821,7 +821,7 @@
           }
         },
         "repo": {
-          "type": "object",
+          "type": ["null","object"],
           "properties": {
             "id": {
               "type": [
