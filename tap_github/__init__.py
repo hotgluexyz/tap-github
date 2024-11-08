@@ -202,6 +202,9 @@ def raise_for_error(resp, source):
 
     if error_code == 403 and response_json and "message" in response_json and "API rate limit exceeded" in response_json["message"]:
         raise APIRateLimitExceededError(f"[Error Code] {error_code}: {response_json}")
+    
+    if 500 <= error_code < 600:
+        raise  RetriableServerError(resp.text)
 
     message = "HTTP-error-code: {}, Error: {}".format(
         error_code, ERROR_CODE_EXCEPTION_MAPPING.get(error_code, {}).get("message", "Unknown Error") if response_json == {} else response_json)
@@ -234,7 +237,20 @@ def rate_throttling(response):
 # pylint: disable=dangerous-default-value
 # during 'Timeout' error there is also possibility of 'ConnectionError',
 # hence added backoff for 'ConnectionError' too.
-@backoff.on_exception(backoff.expo, (requests.Timeout, requests.ConnectionError, APIRateLimitExceededError, RetriableServerError), max_tries=5, factor=2)
+@backoff.on_exception(
+    backoff.expo,
+    (
+        requests.Timeout,
+        requests.ConnectionError,
+        ConnectionRefusedError,
+        ConnectionResetError,
+        APIRateLimitExceededError,
+        RetriableServerError,
+        InternalServerError,
+    ),
+    max_tries=10,
+    factor=2,
+)
 def authed_get(source, url, headers={}):
     with metrics.http_request_timer(source) as timer:
         session.headers.update(headers)
