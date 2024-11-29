@@ -29,6 +29,7 @@ KEY_PROPERTIES = {
     'collaborators': ['id'],
     'pull_requests':['id'],
     'pull_request_details':['id'],
+    'pull_request_files':['id'],
     'stargazers': ['user_id'],
     'releases': ['id'],
     'reviews': ['id'],
@@ -949,6 +950,18 @@ def get_all_pull_requests(schemas, repo_path, state, mdata, start_date):
                             singer.write_record('pr_commits', pr_commit, time_extracted=extraction_time)
                             singer.write_bookmark(state, repo_path, 'pr_commits', {'since': singer.utils.strftime(extraction_time)})
 
+                    if schemas.get('pull_request_files'):
+                        for pr_file in get_pull_request_files(
+                                pr_num,
+                                pr_id,
+                                schemas['pull_request_files'],
+                                repo_path,
+                                state,
+                                mdata['pull_request_files']
+                        ):
+                            singer.write_record('pull_request_files', pr_file, time_extracted=extraction_time)
+                            singer.write_bookmark(state, repo_path, 'pull_request_files', {'since': singer.utils.strftime(extraction_time)})
+
                     if schemas.get('pull_request_details'):
                         pull_request_detail = get_pull_request_details(rec, schemas['pull_request_details'], repo_path, state, mdata['pull_request_details'])
                         if pull_request_detail:
@@ -1016,6 +1029,24 @@ def get_commits_for_pr(pr_number, pr_id, schema, repo_path, state, mdata):
             yield rec
 
         return state
+
+def get_pull_request_files(pr_number, pr_id, schema, repo_path, state, mdata):
+    for response in authed_get_all_pages(
+            'pull_request_files',
+            'https://api.github.com/repos/{}/pulls/{}/files'.format(repo_path, pr_number)
+    ):
+
+        file_data = response.json()
+        for file in file_data:
+            file['_sdc_repository'] = repo_path
+            file['pr_number'] = pr_number
+            file['pr_id'] = pr_id
+            file['id'] = '{}-{}'.format(pr_id, file['sha'])
+            with singer.Transformer() as transformer:
+                rec = transformer.transform(file, schema, metadata=metadata.to_map(mdata))
+            yield rec
+
+    return state
 
 
 def get_all_assignees(schema, repo_path, state, mdata, _start_date):
@@ -1284,7 +1315,7 @@ SYNC_FUNCTIONS = {
 }
 
 SUB_STREAMS = {
-    'pull_requests': ['reviews', 'review_comments', 'pr_commits', 'pull_request_details'],
+    'pull_requests': ['reviews', 'review_comments', 'pr_commits', 'pull_request_details', 'pull_request_files'],
     'projects': ['project_cards', 'project_columns'],
     'teams': ['team_members', 'team_memberships'],
     'organizations': ['organization_members']

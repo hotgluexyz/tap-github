@@ -1,0 +1,79 @@
+{
+    "type": [
+        "null",
+        "object"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "_sdc_repository": {
+            "type": [
+                "string"
+            ]
+        },
+        "pr_id": {
+            "type": [
+                "string"
+            ]
+        },
+        "id": {
+            "type": [
+                "string"
+            ]
+        },
+        "pr_number": {
+            "type": [
+                "string"
+            ]
+        },
+        "sha": {
+            "type": [
+                "string"
+            ]
+        },
+        "file_name": {
+            "type": [
+                "string"
+            ]
+        },
+        "status": {
+            "type": [
+                "string"
+            ]
+        },
+        "additions": {
+            "type": [
+                "integer"
+            ]
+        },
+        "deletions": {
+            "type": [
+                "integer"
+            ]
+        },
+        "changes": {
+            "type": [
+                "integer"
+            ]
+        },
+        "blob_url": {
+            "type": [
+                "string"
+            ]
+        },
+        "raw_url": {
+            "type": [
+                "string"
+            ]
+        },
+        "contents_url": {
+            "type": [
+                "string"
+            ]
+        },
+        "patch": {
+            "type": [
+                "string"
+            ]
+        }
+    }
+}
