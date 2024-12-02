@@ -22,56 +22,67 @@
         },
         "pr_number": {
             "type": [
+                "null",
                 "string"
             ]
         },
         "sha": {
             "type": [
+                "null",
                 "string"
             ]
         },
         "file_name": {
             "type": [
+                "null",
                 "string"
             ]
         },
         "status": {
             "type": [
+                "null",
                 "string"
             ]
         },
         "additions": {
             "type": [
+                "null",
                 "integer"
             ]
         },
         "deletions": {
             "type": [
+                "null",
                 "integer"
             ]
         },
         "changes": {
             "type": [
+                "null",
                 "integer"
             ]
         },
         "blob_url": {
             "type": [
+                "null",
                 "string"
             ]
         },
         "raw_url": {
             "type": [
+                "null",
                 "string"
             ]
         },
         "contents_url": {
             "type": [
+                "null",
                 "string"
             ]
         },
         "patch": {
             "type": [
+                "null",
                 "string"
             ]
         }
