@@ -32,7 +32,7 @@
                 "string"
             ]
         },
-        "file_name": {
+        "filename": {
             "type": [
                 "null",
                 "string"
