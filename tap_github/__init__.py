@@ -19,7 +19,7 @@ logger = singer.get_logger()
 # set default timeout of 300 seconds
 REQUEST_TIMEOUT = 300
 
-REQUIRED_CONFIG_KEYS = ['start_date', 'repository']
+REQUIRED_CONFIG_KEYS = ['start_date']
 
 KEY_PROPERTIES = {
     'commits': ['sha'],
@@ -403,7 +403,26 @@ def extract_repos_from_config(config: dict ) -> list:
     Extracts all repositories from the config and calls get_all_repos()
         for organizations using the wildcard 'org/*' format.
     """
-    repo_paths = list(filter(None, config['repository'].split(' ')))
+    repo_paths = []
+
+    if "repository" not in config and "repositories" not in config:
+        raise ValueError("Config does not contain 'repository' or 'repositories' keys.")
+
+    # Check for the old format
+    if "repository" in config:
+        if not isinstance(config["repository"], str):
+            raise ValueError("Invalid repository format. Expected a space-separated string.")
+        repo_paths = list(filter(None, config["repository"].split(" ")))
+
+    # Check for the new format
+    elif "repositories" in config:
+        if not isinstance(config["repositories"], list):
+            raise ValueError("Invalid repositories format. Expected a list of objects.")
+        
+        for repo_obj in config["repositories"]:
+            if not isinstance(repo_obj, dict) or "repository" not in repo_obj:
+                raise ValueError("Invalid repository object in new config. Each item must be a dict with a 'repository' key.")
+            repo_paths.append(repo_obj["repository"])
 
     orgs_with_all_repos = list(filter(lambda x: x.split('/')[1] == '*', repo_paths))
 

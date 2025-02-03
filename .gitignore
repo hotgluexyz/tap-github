@@ -103,3 +103,4 @@ properties.json
 *.DS_Store
 .AppleDouble
 .LSOverride
+.venv
