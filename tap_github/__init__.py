@@ -192,6 +192,10 @@ def raise_for_error(resp, source):
     except JSONDecodeError:
         response_json = {}
 
+    if error_code == 409 and response_json and response_json.get('message') == 'Git Repository is empty.':
+        logger.info(response_json.get('message'))
+        return None
+
     if error_code == 404:
         details = ERROR_CODE_EXCEPTION_MAPPING.get(error_code).get("message")
         if source == "teams":
@@ -264,7 +268,7 @@ def authed_get(source, url, headers={}):
             # retry
             raise_for_error(resp, source)
         timer.tags[metrics.Tag.http_status_code] = resp.status_code
-        if resp.status_code == 404:
+        if resp.status_code in [404, 409]:
             # return an empty response body since we're not raising a NotFoundException
             resp._content = b'{}' # pylint: disable=protected-access
         return resp
