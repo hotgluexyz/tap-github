@@ -259,7 +259,9 @@ def rate_throttling(response):
 def authed_get(source, url, headers={}):
     with metrics.http_request_timer(source) as timer:
         session.headers.update(headers)
+        logger.info("Making request to %s", url)
         resp = session.request(method='get', url=url, timeout=get_request_timeout())
+        logger.info("Request received status code %s", resp.status_code)
         if resp.status_code != 200:
             _ = get_reset_time_and_remaining_calls(resp, message=f"[Request Status {resp.status_code}] Reset time was going to be reached in" + " {} seconds.  Remaining {} calls")
             # wait for limit to reset
@@ -1054,12 +1056,17 @@ def get_commits_for_pr(pr_number, pr_id, schema, repo_path, state, mdata):
         return state
 
 def get_pull_request_files(pr_number, pr_id, schema, repo_path, state, mdata):
+    logger.info("Starting to process files for PR %s", pr_number)
     for response in authed_get_all_pages(
             'pull_request_files',
             'https://api.github.com/repos/{}/pulls/{}/files'.format(repo_path, pr_number)
     ):
-
         file_data = response.json()
+        # Github has a limit of 3000 files per PR, after which empty arrays are returned
+        # Break early in that case
+        if not file_data:
+            return state
+        logger.info('Processing %s files for PR %s', len(file_data), pr_number)
         for file in file_data:
             file['_sdc_repository'] = repo_path
             file['pr_number'] = pr_number
