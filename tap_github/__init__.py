@@ -411,20 +411,15 @@ def extract_repos_from_config(config: dict ) -> list:
     """
     repo_paths = []
 
-    if "repository" not in config and "repositories" not in config:
+    if not config.get("repository") and not config.get("repositories"):
         raise ValueError("Config does not contain 'repository' or 'repositories' keys.")
 
     # Check for the old format
-    if "repository" in config:
-        if not isinstance(config["repository"], str):
-            raise ValueError("Invalid repository format. Expected a space-separated string.")
+    if "repository" in config and isinstance(config["repository"], str):
         repo_paths = list(filter(None, config["repository"].split(" ")))
 
     # Check for the new format
-    elif "repositories" in config:
-        if not isinstance(config["repositories"], list):
-            raise ValueError("Invalid repositories format. Expected a list of objects.")
-        
+    elif "repositories" in config and isinstance(config["repositories"], list):
         for repo_obj in config["repositories"]:
             if not isinstance(repo_obj, dict) or "repository" not in repo_obj:
                 raise ValueError("Invalid repository object in new config. Each item must be a dict with a 'repository' key.")
