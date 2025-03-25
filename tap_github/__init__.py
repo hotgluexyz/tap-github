@@ -8,6 +8,8 @@ import singer
 import jwt
 import math
 
+# Smoke test change
+
 from datetime import datetime
 
 from singer import (bookmarks, metrics, metadata)
