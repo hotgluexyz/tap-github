@@ -7,9 +7,9 @@ import backoff
 import singer
 import jwt
 import math
-
-from datetime import datetime
-
+import argparse
+from datetime import datetime, timedelta
+import pytz
 from singer import (bookmarks, metrics, metadata)
 from simplejson import JSONDecodeError
 
@@ -239,6 +239,28 @@ def rate_throttling(response):
         logger.info("API rate limit was consumed. Tap will retry the data collection after %s seconds.", seconds_to_sleep)
         time.sleep(seconds_to_sleep)
 
+access_token_expires_at = None
+refresh_token_expires_at = None
+
+
+
+def refresh_token_if_expired():
+    stale_access_token = access_token_expires_at and access_token_expires_at < datetime.now(pytz.UTC).isoformat()
+    stale_refresh_token = refresh_token_expires_at and refresh_token_expires_at < datetime.now(pytz.UTC).isoformat()
+    
+    if stale_access_token or stale_refresh_token:
+        # Pull config
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--config', type=str, default='config.json')
+        args, unknown = parser.parse_known_args()
+        config_path = args.config
+        
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        
+        refresh_oauth_token(config)
+
+
 # pylint: disable=dangerous-default-value
 # during 'Timeout' error there is also possibility of 'ConnectionError',
 # hence added backoff for 'ConnectionError' too.
@@ -257,6 +279,7 @@ def rate_throttling(response):
     factor=2,
 )
 def authed_get(source, url, headers={}):
+    refresh_token_if_expired()
     with metrics.http_request_timer(source) as timer:
         session.headers.update(headers)
         logger.info("Making request to %s", url)
@@ -1330,6 +1353,8 @@ def refresh_oauth_token(config):
     Returns:
         dict: Updated config with new access_token and refresh_token
     """
+    global access_token_expires_at
+    global refresh_token_expires_at
     if "refresh_token" not in config:
         logger.error("No refresh token found in config, cannot refresh access token")
         raise BadCredentialsException("No refresh token found in config")
@@ -1355,10 +1380,19 @@ def refresh_oauth_token(config):
         token_data = response.json()
         
         config["access_token"] = token_data["access_token"]
-        
+        now = datetime.now(pytz.UTC)
+        if "expires_in" in token_data:
+            config["access_token_expires_at"] = (now + timedelta(seconds=token_data["expires_in"] - 60)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            access_token_expires_at = config["access_token_expires_at"]
+        if "refresh_token_expires_in" in token_data:
+            config["refresh_token_expires_at"] = (now + timedelta(seconds=token_data["refresh_token_expires_in"] - 60)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            refresh_token_expires_at = config["refresh_token_expires_at"]
         if "refresh_token" in token_data:
             config["refresh_token"] = token_data["refresh_token"]
         save_config(config)
+
+        if session.headers.get('Authorization'):
+            session.headers['Authorization'] = 'Bearer ' + config["access_token"]
         
         logger.info("Successfully refreshed OAuth access token")
         return config
@@ -1374,8 +1408,10 @@ def save_config(config):
     Args:
         config (dict): The updated configuration
     """
-    config_path = os.environ.get("TAP_CONFIG_PATH", "config.json")
-    
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, default='config.json')
+    args, unknown = parser.parse_known_args()
+    config_path = args.config
     try:
         with open(config_path, 'w') as f:
             json.dump(config, f, indent=4)
@@ -1472,11 +1508,16 @@ def do_sync(config, state, catalog):
 
 @singer.utils.handle_top_exception(logger)
 def main():
+    global access_token_expires_at
+    global refresh_token_expires_at
     args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS)
 
     args.config["is_jwt_token"] = False
+
+    access_token_expires_at = args.config.get("access_token_expires_at")
+    refresh_token_expires_at = args.config.get("refresh_token_expires_at")
     
-    if not "access_token" in args.config:
+    if not args.config.get("access_token"):
         if "app_id" in args.config and "private_key" in args.config and "installation_id" in args.config:
             args.config["access_token"] = get_jwt_token(args.config)
             args.config["is_jwt_token"] = True
@@ -1489,15 +1530,8 @@ def main():
         do_discover(args.config)
     else:
         catalog = args.properties if args.properties else get_catalog()
-        try:
-            do_sync(args.config, args.state, catalog)
-        except BadCredentialsException:
-            if "refresh_token" in args.config and "client_id" in args.config and "client_secret" in args.config:
-                logger.info("Access token expired, attempting to refresh")
-                args.config = refresh_oauth_token(args.config)
-                do_sync(args.config, args.state, catalog)
-            else:
-                raise
+
+        do_sync(args.config, args.state, catalog)
 
 if __name__ == '__main__':
     main()
