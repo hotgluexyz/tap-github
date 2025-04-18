@@ -1319,6 +1319,70 @@ def get_jwt_token(config):
 
     return token
 
+def refresh_oauth_token(config):
+    """
+    Refreshes the OAuth access token using the refresh token
+    and updates the config file with the new tokens.
+    
+    Args:
+        config (dict): The current configuration with refresh_token
+        
+    Returns:
+        dict: Updated config with new access_token and refresh_token
+    """
+    if "refresh_token" not in config:
+        logger.error("No refresh token found in config, cannot refresh access token")
+        raise BadCredentialsException("No refresh token found in config")
+    
+    logger.info("Refreshing OAuth access token")
+    
+    token_url = "https://github.com/login/oauth/access_token"
+    
+    data = {
+        "client_id": config["client_id"],
+        "client_secret": config["client_secret"],
+        "refresh_token": config["refresh_token"],
+        "grant_type": "refresh_token"
+    }
+    
+    headers = {
+        "Accept": "application/json"
+    }
+    
+    try:
+        response = requests.post(token_url, data=data, headers=headers)
+        response.raise_for_status()
+        token_data = response.json()
+        
+        config["access_token"] = token_data["access_token"]
+        
+        if "refresh_token" in token_data:
+            config["refresh_token"] = token_data["refresh_token"]
+        save_config(config)
+        
+        logger.info("Successfully refreshed OAuth access token")
+        return config
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to refresh OAuth token: {str(e)}")
+        raise BadCredentialsException(f"Failed to refresh OAuth token: {str(e)}")
+
+def save_config(config):
+    """
+    Saves the updated config back to the config file.
+    
+    Args:
+        config (dict): The updated configuration
+    """
+    config_path = os.environ.get("TAP_CONFIG_PATH", "config.json")
+    
+    try:
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=4)
+        logger.info(f"Updated config saved to {config_path}")
+    except Exception as e:
+        logger.warning(f"Failed to save updated config: {str(e)}")
+
 SYNC_FUNCTIONS = {
     'commits': get_all_commits,
     'comments': get_all_comments,
@@ -1411,15 +1475,29 @@ def main():
     args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS)
 
     args.config["is_jwt_token"] = False
+    
     if not "access_token" in args.config:
-        args.config["access_token"] = get_jwt_token(args.config)
-        args.config["is_jwt_token"] = True
+        if "app_id" in args.config and "private_key" in args.config and "installation_id" in args.config:
+            args.config["access_token"] = get_jwt_token(args.config)
+            args.config["is_jwt_token"] = True
+        elif "refresh_token" in args.config and "client_id" in args.config and "client_secret" in args.config:
+            args.config = refresh_oauth_token(args.config)
+        else:
+            raise BadCredentialsException("No valid authentication method provided. Either provide an access_token, or app credentials, or OAuth credentials with refresh token.")
 
     if args.discover:
         do_discover(args.config)
     else:
         catalog = args.properties if args.properties else get_catalog()
-        do_sync(args.config, args.state, catalog)
+        try:
+            do_sync(args.config, args.state, catalog)
+        except BadCredentialsException:
+            if "refresh_token" in args.config and "client_id" in args.config and "client_secret" in args.config:
+                logger.info("Access token expired, attempting to refresh")
+                args.config = refresh_oauth_token(args.config)
+                do_sync(args.config, args.state, catalog)
+            else:
+                raise
 
 if __name__ == '__main__':
     main()
