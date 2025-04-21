@@ -241,7 +241,7 @@ def rate_throttling(response):
 
 access_token_expires_at = None
 refresh_token_expires_at = None
-
+config_path = None
 
 
 def refresh_token_if_expired():
@@ -250,11 +250,6 @@ def refresh_token_if_expired():
     
     if stale_access_token or stale_refresh_token:
         # Pull config
-        parser = argparse.ArgumentParser()
-        parser.add_argument('--config', type=str, default='config.json')
-        args, unknown = parser.parse_known_args()
-        config_path = args.config
-        
         with open(config_path, 'r') as f:
             config = json.load(f)
         
@@ -1408,10 +1403,6 @@ def save_config(config):
     Args:
         config (dict): The updated configuration
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default='config.json')
-    args, unknown = parser.parse_known_args()
-    config_path = args.config
     try:
         with open(config_path, 'w') as f:
             json.dump(config, f, indent=4)
@@ -1510,6 +1501,15 @@ def do_sync(config, state, catalog):
 def main():
     global access_token_expires_at
     global refresh_token_expires_at
+    global config_path
+
+    # Store config path for later use
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, default='config.json')
+    path_args, unknown = parser.parse_known_args()
+    config_path = path_args.config
+
+
     args = singer.utils.parse_args(REQUIRED_CONFIG_KEYS)
 
     args.config["is_jwt_token"] = False
