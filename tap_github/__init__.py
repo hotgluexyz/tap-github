@@ -1386,8 +1386,7 @@ def refresh_oauth_token(config):
             config["refresh_token"] = token_data["refresh_token"]
         save_config(config)
 
-        if session.headers.get('Authorization'):
-            session.headers['Authorization'] = 'Bearer ' + config["access_token"]
+        session.headers['Authorization'] = 'Bearer ' + config["access_token"]
         
         logger.info("Successfully refreshed OAuth access token")
         return config
