@@ -219,6 +219,8 @@ def raise_for_error(resp, source):
 
 def calculate_seconds(epoch):
     current = time.time()
+    if epoch < current:
+        return 1
     return math.ceil(epoch - current)
 
 def get_reset_time_and_remaining_calls(response, message = "Reset time will be reached in {} seconds. Remaining {} calls"):
