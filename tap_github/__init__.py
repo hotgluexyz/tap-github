@@ -243,19 +243,24 @@ def rate_throttling(response):
 
 access_token_expires_at = None
 refresh_token_expires_at = None
+jwt_token_expires_at = None
 config_path = None
 
 
 def refresh_token_if_expired():
     stale_access_token = access_token_expires_at and access_token_expires_at < datetime.now(pytz.UTC).isoformat()
     stale_refresh_token = refresh_token_expires_at and refresh_token_expires_at < datetime.now(pytz.UTC).isoformat()
+    stale_jwt_token = jwt_token_expires_at and jwt_token_expires_at < datetime.now(pytz.UTC).isoformat()
     
-    if stale_access_token or stale_refresh_token:
+    if stale_access_token or stale_refresh_token or stale_jwt_token:
         # Pull config
         with open(config_path, 'r') as f:
             config = json.load(f)
         
-        refresh_oauth_token(config)
+        if config.get("is_jwt_token") and stale_jwt_token:
+            refresh_jwt_token(config)
+        else:
+            refresh_oauth_token(config)
 
 
 # pylint: disable=dangerous-default-value
@@ -1319,7 +1324,7 @@ def get_jwt_token(config):
 
     payload = {
     "iat": now - 60,
-    "exp": now + (10 * 60),
+    "exp": now + (9 * 60), # using 9 minutes because 10 minutes gives error
     "iss": app_id
     }
 
@@ -1335,9 +1340,15 @@ def get_jwt_token(config):
         }
 
     response = requests.post(url, headers=header)
-    token = response.json()["token"]
+    token_data = response.json()
+    token = token_data["token"]
+    
+    expires_at_raw = token_data["expires_at"]
+    expires_at_dt = datetime.fromisoformat(expires_at_raw.replace('Z', '+00:00'))
+    expires_at_buffered = expires_at_dt - timedelta(seconds=60)
+    expires_at = expires_at_buffered.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
-    return token
+    return token, expires_at
 
 def refresh_oauth_token(config):
     """
@@ -1396,6 +1407,39 @@ def refresh_oauth_token(config):
     except requests.exceptions.RequestException as e:
         logger.error(f"Failed to refresh OAuth token: {str(e)}")
         raise BadCredentialsException(f"Failed to refresh OAuth token: {str(e)}")
+
+def refresh_jwt_token(config):
+    """
+    Refreshes the JWT access token using the app credentials
+    and updates the config file with the new token.
+    
+    Args:
+        config (dict): The current configuration with JWT credentials
+        
+    Returns:
+        dict: Updated config with new access_token and jwt_token_expires_at
+    """
+    global jwt_token_expires_at
+    
+    logger.info("Refreshing JWT access token")
+    
+    try:
+        new_token, new_expires_at = get_jwt_token(config)
+        
+        config["access_token"] = new_token
+        config["jwt_token_expires_at"] = new_expires_at
+        jwt_token_expires_at = new_expires_at
+        
+        save_config(config)
+        
+        session.headers['authorization'] = 'token ' + new_token
+        
+        logger.info("Successfully refreshed JWT access token")
+        return config
+        
+    except Exception as e:
+        logger.error(f"Failed to refresh JWT token: {str(e)}")
+        raise BadCredentialsException(f"Failed to refresh JWT token: {str(e)}")
 
 def save_config(config):
     """
@@ -1502,6 +1546,7 @@ def do_sync(config, state, catalog):
 def main():
     global access_token_expires_at
     global refresh_token_expires_at
+    global jwt_token_expires_at
     global config_path
 
     # Store config path for later use
@@ -1517,10 +1562,12 @@ def main():
 
     access_token_expires_at = args.config.get("access_token_expires_at")
     refresh_token_expires_at = args.config.get("refresh_token_expires_at")
+    jwt_token_expires_at = args.config.get("jwt_token_expires_at")
+    
     
     if not args.config.get("access_token"):
         if "app_id" in args.config and "private_key" in args.config and "installation_id" in args.config:
-            args.config["access_token"] = get_jwt_token(args.config)
+            args.config = refresh_jwt_token(args.config)
             args.config["is_jwt_token"] = True
         elif "refresh_token" in args.config and "client_id" in args.config and "client_secret" in args.config:
             args.config = refresh_oauth_token(args.config)
