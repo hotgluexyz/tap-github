@@ -342,15 +342,21 @@ def load_schemas():
 class DependencyException(Exception):
     pass
 
-def validate_dependencies(selected_stream_ids):
+def validate_dependencies(selected_stream_ids, config=None):
     errs = []
     msg_tmpl = ("Unable to extract '{0}' data, "
                 "to receive '{0}' data, you also need to select '{1}'.")
+
+    # For GHS tokens, allow organization_members to be selected independently
+    is_ghs_token = config and (config.get("private_key") and config.get("app_id") and config.get("installation_id"))
 
     for main_stream, sub_streams in SUB_STREAMS.items():
         if main_stream not in selected_stream_ids:
             for sub_stream in sub_streams:
                 if sub_stream in selected_stream_ids:
+                    # Allow organization_members without organizations for GHS tokens
+                    if is_ghs_token and sub_stream == 'organization_members' and main_stream == 'organizations':
+                        continue
                     errs.append(msg_tmpl.format(sub_stream, main_stream))
 
     if errs:
@@ -496,6 +502,33 @@ def do_discover(config):
     # dump catalog
     print(json.dumps(catalog, indent=2))
 
+def get_organizations_from_config(config: dict) -> list:
+    """
+    Extracts unique organization names from the repository configuration.
+    This is used for GHS token mode to fetch organization members directly.
+    """
+    repo_paths = []
+    
+    if not config.get("repository") and not config.get("repositories"):
+        return []
+
+    if "repository" in config and isinstance(config["repository"], str):
+        repo_paths = list(filter(None, config["repository"].split(" ")))
+
+    elif "repositories" in config and isinstance(config["repositories"], list):
+        for repo_obj in config["repositories"]:
+            if not isinstance(repo_obj, dict) or "repository" not in repo_obj:
+                continue
+            repo_paths.append(repo_obj["repository"])
+
+    organizations = set()
+    for repo_path in repo_paths:
+        if '/' in repo_path:
+            org = repo_path.split('/')[0]
+            organizations.add(org)
+    
+    return list(organizations)
+
 def get_all_teams(schemas, repo_path, state, mdata, _start_date):
     org = repo_path.split('/')[0]
     with metrics.record_counter('teams') as counter:
@@ -573,6 +606,58 @@ def get_all_organization_members(org, schemas, repo_path, state, mdata):
                     rec = transformer.transform(r, schemas, metadata=metadata.to_map(mdata))
                 counter.increment()
                 yield rec
+    return state
+
+def get_all_organization_members_from_config(config, schemas, repo_path, state, mdata):
+    """
+    Alternative function to fetch organization members directly from organizations 
+    specified in the config. This is useful for GHS (GitHub Server-to-Server) tokens
+    that may not have access to the /user/orgs endpoint but can access specific org members.
+    """
+    organizations = get_organizations_from_config(config)
+    
+    if not organizations:
+        logger.info("No organizations found in config for GHS organization members sync")
+        return state
+    
+    logger.info("Fetching organization members for configured organizations: %s", organizations)
+    
+    with metrics.record_counter('organization_members') as counter:
+        for org_name in organizations:
+            logger.info("Fetching members for organization: %s", org_name)
+            
+            try:
+                for response in authed_get_all_pages(
+                        'organization_members',
+                        'https://api.github.com/orgs/{}/members?sort=created_at&direction=desc'.format(org_name)
+                ):
+                    organization_members = response.json()
+                    for r in organization_members:
+                        r["org_id"] = None  
+                        r["org_name"] = org_name
+                        
+                        try:
+                            user_rec = authed_get('organization_members_users', r["url"])
+                            user_json = user_rec.json()
+                            r["name"] = user_json.get("name")
+                            r["email"] = user_json.get("email")
+                        except Exception as e:
+                            logger.warning("Failed to fetch user details for %s: %s", r.get("login", "unknown"), str(e))
+                            r["name"] = None
+                            r["email"] = None
+                        
+                        with singer.Transformer() as transformer:
+                            rec = transformer.transform(r, schemas, metadata=metadata.to_map(mdata))
+                        counter.increment()
+                        yield rec
+                        
+            except NotFoundException as e:
+                logger.warning("Organization '%s' not found or access denied: %s", org_name, str(e))
+                continue
+            except AuthException as e:
+                logger.warning("Permission denied for organization '%s': %s", org_name, str(e))
+                continue
+    
     return state
 
 
@@ -1295,6 +1380,21 @@ def get_selected_streams(catalog):
 
     return selected_streams
 
+def get_all_organization_members_standalone(schema, repo_path, state, mdata, _start_date):
+    """
+    Standalone sync function for organization_members stream when used with GHS tokens.
+    This allows fetching organization members independently without the organizations stream.
+    """
+    config = {}
+    with open(config_path, 'r') as f:   
+        config = json.load(f)
+    
+    extraction_time = singer.utils.now()
+    for organization_member_rec in get_all_organization_members_from_config(config, schema, repo_path, state, mdata):
+        singer.write_record('organization_members', organization_member_rec, time_extracted=extraction_time)
+    
+    return state
+
 def get_stream_from_catalog(stream_id, catalog):
     for stream in catalog['streams']:
         if stream['tap_stream_id'] == stream_id:
@@ -1472,6 +1572,7 @@ SYNC_FUNCTIONS = {
     'commit_comments': get_all_commit_comments,
     'teams': get_all_teams,
     'organizations': get_all_organizations,
+    'organization_members': get_all_organization_members_standalone,
     'deployments': get_all_deployments,
 }
 
@@ -1492,7 +1593,7 @@ def do_sync(config, state, catalog):
     start_date = config['start_date'] if 'start_date' in config else None
     # get selected streams, make sure stream dependencies are met
     selected_stream_ids = get_selected_streams(catalog)
-    validate_dependencies(selected_stream_ids)
+    validate_dependencies(selected_stream_ids, config)
 
     repositories = extract_repos_from_config(config)
 
