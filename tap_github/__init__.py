@@ -1572,7 +1572,6 @@ SYNC_FUNCTIONS = {
     'commit_comments': get_all_commit_comments,
     'teams': get_all_teams,
     'organizations': get_all_organizations,
-    'organization_members': get_all_organization_members_standalone,
     'deployments': get_all_deployments,
 }
 
@@ -1599,6 +1598,9 @@ def do_sync(config, state, catalog):
 
     state = translate_state(state, catalog, repositories)
     singer.write_state(state)
+
+    if config.get("private_key") and config.get("app_id") and config.get("installation_id"):
+        SYNC_FUNCTIONS['organization_members'] = get_all_organization_members_standalone
 
     #pylint: disable=too-many-nested-blocks
     for repo in repositories:
