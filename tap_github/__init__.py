@@ -204,9 +204,9 @@ def raise_for_error(resp, source):
         logger.info(message)
         # don't raise a NotFoundException
         return None
-
-    if error_code == 403 and response_json and "message" in response_json and "API rate limit exceeded" in response_json["message"]:
-        raise APIRateLimitExceededError(f"[Error Code] {error_code}: {response_json}")
+    
+    if error_code == 403:
+        raise AuthException(f"[Error Code] {error_code}: {response_json}")
     
     if 500 <= error_code < 600:
         raise  RetriableServerError(resp.text)
@@ -271,6 +271,7 @@ def refresh_token_if_expired():
         APIRateLimitExceededError,
         RetriableServerError,
         InternalServerError,
+        AuthException,
     ),
     max_tries=10,
     factor=2,
