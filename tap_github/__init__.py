@@ -1087,7 +1087,9 @@ def get_pull_request_files(pr_number, pr_id, schema, repo_path, state, mdata):
             file['_sdc_repository'] = repo_path
             file['pr_number'] = pr_number
             file['pr_id'] = pr_id
-            file['id'] = '{}-{}'.format(pr_id, file['sha'])
+            # Replace special characters in filename to avoid issues with ID formatting
+            safe_filename = file['filename'].replace('/', '_').replace('\\', '_').replace(':', '_').replace(' ', '_')
+            file['id'] = '{}-{}-{}'.format(pr_id, file['sha'], safe_filename)
             with singer.Transformer() as transformer:
                 rec = transformer.transform(file, schema, metadata=metadata.to_map(mdata))
             yield rec
