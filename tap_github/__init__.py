@@ -1681,8 +1681,14 @@ def main():
         do_discover(args.config)
     else:
         catalog = args.properties if args.properties else get_catalog()
-
         do_sync(args.config, args.state, catalog)
+
+    if args.config.get("is_jwt_token"):
+        if "access_token" in args.config:
+            del args.config["access_token"]
+            del args.config["is_jwt_token"]
+            del args.config["jwt_token_expires_at"]
+        save_config(args.config)
 
 if __name__ == '__main__':
     main()
