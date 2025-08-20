@@ -243,19 +243,24 @@ def rate_throttling(response):
 
 access_token_expires_at = None
 refresh_token_expires_at = None
+jwt_token_expires_at = None
 config_path = None
 
 
 def refresh_token_if_expired():
     stale_access_token = access_token_expires_at and access_token_expires_at < datetime.now(pytz.UTC).isoformat()
     stale_refresh_token = refresh_token_expires_at and refresh_token_expires_at < datetime.now(pytz.UTC).isoformat()
+    stale_jwt_token = jwt_token_expires_at and jwt_token_expires_at < datetime.now(pytz.UTC).isoformat()
     
-    if stale_access_token or stale_refresh_token:
+    if stale_access_token or stale_refresh_token or stale_jwt_token:
         # Pull config
         with open(config_path, 'r') as f:
             config = json.load(f)
         
-        refresh_oauth_token(config)
+        if config.get("is_jwt_token") and stale_jwt_token:
+            refresh_jwt_token(config)
+        else:
+            refresh_oauth_token(config)
 
 
 # pylint: disable=dangerous-default-value
@@ -338,15 +343,21 @@ def load_schemas():
 class DependencyException(Exception):
     pass
 
-def validate_dependencies(selected_stream_ids):
+def validate_dependencies(selected_stream_ids, config=None):
     errs = []
     msg_tmpl = ("Unable to extract '{0}' data, "
                 "to receive '{0}' data, you also need to select '{1}'.")
+
+    # For GHS tokens, allow organization_members to be selected independently
+    is_ghs_token = config and (config.get("private_key") and config.get("app_id") and config.get("installation_id"))
 
     for main_stream, sub_streams in SUB_STREAMS.items():
         if main_stream not in selected_stream_ids:
             for sub_stream in sub_streams:
                 if sub_stream in selected_stream_ids:
+                    # Allow organization_members without organizations for GHS tokens
+                    if is_ghs_token and sub_stream == 'organization_members' and main_stream == 'organizations':
+                        continue
                     errs.append(msg_tmpl.format(sub_stream, main_stream))
 
     if errs:
@@ -492,6 +503,33 @@ def do_discover(config):
     # dump catalog
     print(json.dumps(catalog, indent=2))
 
+def get_organizations_from_config(config: dict) -> list:
+    """
+    Extracts unique organization names from the repository configuration.
+    This is used for GHS token mode to fetch organization members directly.
+    """
+    repo_paths = []
+    
+    if not config.get("repository") and not config.get("repositories"):
+        return []
+
+    if "repository" in config and isinstance(config["repository"], str):
+        repo_paths = list(filter(None, config["repository"].split(" ")))
+
+    elif "repositories" in config and isinstance(config["repositories"], list):
+        for repo_obj in config["repositories"]:
+            if not isinstance(repo_obj, dict) or "repository" not in repo_obj:
+                continue
+            repo_paths.append(repo_obj["repository"])
+
+    organizations = set()
+    for repo_path in repo_paths:
+        if '/' in repo_path:
+            org = repo_path.split('/')[0]
+            organizations.add(org)
+    
+    return list(organizations)
+
 def get_all_teams(schemas, repo_path, state, mdata, _start_date):
     org = repo_path.split('/')[0]
     with metrics.record_counter('teams') as counter:
@@ -569,6 +607,58 @@ def get_all_organization_members(org, schemas, repo_path, state, mdata):
                     rec = transformer.transform(r, schemas, metadata=metadata.to_map(mdata))
                 counter.increment()
                 yield rec
+    return state
+
+def get_all_organization_members_from_config(config, schemas, repo_path, state, mdata):
+    """
+    Alternative function to fetch organization members directly from organizations 
+    specified in the config. This is useful for GHS (GitHub Server-to-Server) tokens
+    that may not have access to the /user/orgs endpoint but can access specific org members.
+    """
+    organizations = get_organizations_from_config(config)
+    
+    if not organizations:
+        logger.info("No organizations found in config for GHS organization members sync")
+        return state
+    
+    logger.info("Fetching organization members for configured organizations: %s", organizations)
+    
+    with metrics.record_counter('organization_members') as counter:
+        for org_name in organizations:
+            logger.info("Fetching members for organization: %s", org_name)
+            
+            try:
+                for response in authed_get_all_pages(
+                        'organization_members',
+                        'https://api.github.com/orgs/{}/members?sort=created_at&direction=desc'.format(org_name)
+                ):
+                    organization_members = response.json()
+                    for r in organization_members:
+                        r["org_id"] = None  
+                        r["org_name"] = org_name
+                        
+                        try:
+                            user_rec = authed_get('organization_members_users', r["url"])
+                            user_json = user_rec.json()
+                            r["name"] = user_json.get("name")
+                            r["email"] = user_json.get("email")
+                        except Exception as e:
+                            logger.warning("Failed to fetch user details for %s: %s", r.get("login", "unknown"), str(e))
+                            r["name"] = None
+                            r["email"] = None
+                        
+                        with singer.Transformer() as transformer:
+                            rec = transformer.transform(r, schemas, metadata=metadata.to_map(mdata))
+                        counter.increment()
+                        yield rec
+                        
+            except NotFoundException as e:
+                logger.warning("Organization '%s' not found or access denied: %s", org_name, str(e))
+                continue
+            except AuthException as e:
+                logger.warning("Permission denied for organization '%s': %s", org_name, str(e))
+                continue
+    
     return state
 
 
@@ -1291,6 +1381,21 @@ def get_selected_streams(catalog):
 
     return selected_streams
 
+def get_all_organization_members_standalone(schema, repo_path, state, mdata, _start_date):
+    """
+    Standalone sync function for organization_members stream when used with GHS tokens.
+    This allows fetching organization members independently without the organizations stream.
+    """
+    config = {}
+    with open(config_path, 'r') as f:   
+        config = json.load(f)
+    
+    extraction_time = singer.utils.now()
+    for organization_member_rec in get_all_organization_members_from_config(config, schema, repo_path, state, mdata):
+        singer.write_record('organization_members', organization_member_rec, time_extracted=extraction_time)
+    
+    return state
+
 def get_stream_from_catalog(stream_id, catalog):
     for stream in catalog['streams']:
         if stream['tap_stream_id'] == stream_id:
@@ -1320,7 +1425,7 @@ def get_jwt_token(config):
 
     payload = {
     "iat": now - 60,
-    "exp": now + (10 * 60),
+    "exp": now + (9 * 60), # using 9 minutes because 10 minutes gives error
     "iss": app_id
     }
 
@@ -1336,9 +1441,15 @@ def get_jwt_token(config):
         }
 
     response = requests.post(url, headers=header)
-    token = response.json()["token"]
+    token_data = response.json()
+    token = token_data["token"]
+    
+    expires_at_raw = token_data["expires_at"]
+    expires_at_dt = datetime.fromisoformat(expires_at_raw.replace('Z', '+00:00'))
+    expires_at_buffered = expires_at_dt - timedelta(seconds=60)
+    expires_at = expires_at_buffered.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
-    return token
+    return token, expires_at
 
 def refresh_oauth_token(config):
     """
@@ -1398,6 +1509,39 @@ def refresh_oauth_token(config):
         logger.error(f"Failed to refresh OAuth token: {str(e)}")
         raise BadCredentialsException(f"Failed to refresh OAuth token: {str(e)}")
 
+def refresh_jwt_token(config):
+    """
+    Refreshes the JWT access token using the app credentials
+    and updates the config file with the new token.
+    
+    Args:
+        config (dict): The current configuration with JWT credentials
+        
+    Returns:
+        dict: Updated config with new access_token and jwt_token_expires_at
+    """
+    global jwt_token_expires_at
+    
+    logger.info("Refreshing JWT access token")
+    
+    try:
+        new_token, new_expires_at = get_jwt_token(config)
+        
+        config["access_token"] = new_token
+        config["jwt_token_expires_at"] = new_expires_at
+        jwt_token_expires_at = new_expires_at
+        
+        save_config(config)
+        
+        session.headers['authorization'] = 'token ' + new_token
+        
+        logger.info("Successfully refreshed JWT access token")
+        return config
+        
+    except Exception as e:
+        logger.error(f"Failed to refresh JWT token: {str(e)}")
+        raise BadCredentialsException(f"Failed to refresh JWT token: {str(e)}")
+
 def save_config(config):
     """
     Saves the updated config back to the config file.
@@ -1449,12 +1593,15 @@ def do_sync(config, state, catalog):
     start_date = config['start_date'] if 'start_date' in config else None
     # get selected streams, make sure stream dependencies are met
     selected_stream_ids = get_selected_streams(catalog)
-    validate_dependencies(selected_stream_ids)
+    validate_dependencies(selected_stream_ids, config)
 
     repositories = extract_repos_from_config(config)
 
     state = translate_state(state, catalog, repositories)
     singer.write_state(state)
+
+    if config.get("private_key") and config.get("app_id") and config.get("installation_id"):
+        SYNC_FUNCTIONS['organization_members'] = get_all_organization_members_standalone
 
     #pylint: disable=too-many-nested-blocks
     for repo in repositories:
@@ -1503,6 +1650,7 @@ def do_sync(config, state, catalog):
 def main():
     global access_token_expires_at
     global refresh_token_expires_at
+    global jwt_token_expires_at
     global config_path
 
     # Store config path for later use
@@ -1518,10 +1666,12 @@ def main():
 
     access_token_expires_at = args.config.get("access_token_expires_at")
     refresh_token_expires_at = args.config.get("refresh_token_expires_at")
+    jwt_token_expires_at = args.config.get("jwt_token_expires_at")
+    
     
     if not args.config.get("access_token"):
         if "app_id" in args.config and "private_key" in args.config and "installation_id" in args.config:
-            args.config["access_token"] = get_jwt_token(args.config)
+            args.config = refresh_jwt_token(args.config)
             args.config["is_jwt_token"] = True
         elif "refresh_token" in args.config and "client_id" in args.config and "client_secret" in args.config:
             args.config = refresh_oauth_token(args.config)
@@ -1532,8 +1682,14 @@ def main():
         do_discover(args.config)
     else:
         catalog = args.properties if args.properties else get_catalog()
-
         do_sync(args.config, args.state, catalog)
+
+    if args.config.get("is_jwt_token"):
+        if "access_token" in args.config:
+            del args.config["access_token"]
+            del args.config["is_jwt_token"]
+            del args.config["jwt_token_expires_at"]
+        save_config(args.config)
 
 if __name__ == '__main__':
     main()
