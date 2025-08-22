@@ -29,7 +29,7 @@ KEY_PROPERTIES = {
     'collaborators': ['id'],
     'pull_requests':['id'],
     'pull_request_details':['id'],
-    'pull_request_files':['id'],
+    'pull_request_files':['id', 'filename'],
     'stargazers': ['user_id'],
     'releases': ['id'],
     'reviews': ['id'],
@@ -1088,8 +1088,7 @@ def get_pull_request_files(pr_number, pr_id, schema, repo_path, state, mdata):
             file['pr_number'] = pr_number
             file['pr_id'] = pr_id
             # Replace special characters in filename to avoid issues with ID formatting
-            safe_filename = file['filename'].replace('/', '_').replace('\\', '_').replace(':', '_').replace(' ', '_')
-            file['id'] = '{}-{}-{}'.format(pr_id, file['sha'], safe_filename)
+            file['id'] = '{}-{}'.format(pr_id, file['sha'])
             with singer.Transformer() as transformer:
                 rec = transformer.transform(file, schema, metadata=metadata.to_map(mdata))
             yield rec
