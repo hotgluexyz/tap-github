@@ -16,7 +16,6 @@ class Runner(VCRTapTestRunner):
     ]
     TOKEN_KEYS = [*VCRTapTestRunner.TOKEN_KEYS, "private_key", "redirect_uri"]
     PRESERVE_KEYS = {
-        "id",  # Organization lookups and record identities.
         "created_at",  # Incremental event boundary when updated_at is absent.
         "updated_at",  # Incremental early-stop boundary for sorted responses.
     }
@@ -24,6 +23,17 @@ class Runner(VCRTapTestRunner):
     def __init__(self, test_case, script_dir):
         super().__init__(test_case, script_dir)
         self.catalog_attr = "properties"
+        self._ids = {}
+
+    def scrub_id(self, value):
+        # Fixture-local aliases carry no original ID and cannot be GitHub IDs.
+        if int(value) < 0:
+            return value
+        key = str(value)
+        if key not in self._ids:
+            self._ids[key] = -(len(self._ids) + 1)
+        alias = self._ids[key]
+        return str(alias) if isinstance(value, str) else alias
 
     def module(self) -> str:
         return "tap_github"
@@ -37,9 +47,15 @@ class Runner(VCRTapTestRunner):
         parts = urlsplit(uri)
         path = parts.path.split("/")
         if parts.netloc == "api.github.com" and len(path) > 2:
+            if (
+                path[1]
+                in {"repositories", "organizations", "orgs", "users", "user"}
+                and path[2].isdigit()
+            ):
+                path[2] = self.scrub_id(path[2])
             count = {"repos": 2, "users": 1, "orgs": 1}.get(path[1], 0)
             for index in range(2, min(len(path), 2 + count)):
-                if path[index] and not path[index].isdigit():
+                if path[index] and not path[index].lstrip("-").isdigit():
                     digest = hashlib.sha256(
                         path[index].lower().encode()
                     ).hexdigest()
@@ -81,7 +97,13 @@ class Runner(VCRTapTestRunner):
                         # Child PR endpoint paths.
                         fake["number"] = raw["number"]
                 for key, value in raw.items():
-                    if isinstance(value, (dict, list)):
+                    if (key == "id" or key.endswith("_id")) and (
+                        isinstance(value, int)
+                        or isinstance(value, str)
+                        and value.lstrip("-").isdigit()
+                    ):
+                        fake[key] = self.scrub_id(value)
+                    elif isinstance(value, (dict, list)):
                         restore_references(value, fake[key])
 
         restore_references(original, scrubbed)
