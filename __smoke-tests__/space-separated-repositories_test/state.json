@@ -1,0 +1,42 @@
+{
+  "bookmarks": {
+    "fake-b161c6d93d60/fake-cbebc88f07f1": {
+      "events": {
+        "since": "2025-01-30T15:44:56.628555Z"
+      },
+      "issues": {
+        "since": "2025-01-30T20:02:26.598502Z"
+      },
+      "commits": {
+        "since": "2025-01-30T20:02:27.311185Z"
+      },
+      "comments": {
+        "since": "2025-01-30T20:02:32.672086Z"
+      },
+      "issue_events": {
+        "since": "2025-01-30T20:02:33.326945Z"
+      },
+      "pull_requests": {
+        "since": "2025-01-30T20:02:34.687206Z"
+      },
+      "pr_commits": {
+        "since": "2025-01-30T20:02:34.687206Z"
+      },
+      "pull_request_files": {
+        "since": "2025-01-30T20:02:34.687206Z"
+      },
+      "pull_request_details": {
+        "since": "2025-01-30T20:02:34.687206Z"
+      },
+      "reviews": {
+        "since": "2025-01-30T20:02:34.687206Z"
+      },
+      "review_comments": {
+        "since": "2025-01-30T20:02:34.687206Z"
+      },
+      "commit_comments": {
+        "since": "2025-01-30T18:02:22.215733Z"
+      }
+    }
+  }
+}
