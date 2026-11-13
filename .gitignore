@@ -104,3 +104,7 @@ properties.json
 .AppleDouble
 .LSOverride
 .venv
+
+__smoke-tests__/**/test_runtime/
+__smoke-tests__/unsanitized_*_test/
+!__smoke-tests__/*_test/config.json
